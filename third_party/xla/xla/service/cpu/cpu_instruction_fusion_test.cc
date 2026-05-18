@@ -1140,5 +1140,44 @@ TEST_F(InstructionFusionTest, SkipReduceComputationsIfFusionEmitters) {
   EXPECT_FALSE(changed);
 }
 
+TEST_F(InstructionFusionTest, DontFuseLayoutChangingCopyInXtile) {
+  constexpr absl::string_view kHloString = R"(
+    HloModule test_module
+
+    ENTRY main {
+      p0 = f32[10,10]{0,1} parameter(0)
+      copy = f32[10,10]{1,0} copy(p0)
+      ROOT exp = f32[10,10]{1,0} exponential(copy)
+    }
+  )";
+
+  // Test with tiled emitter enabled (default).
+  {
+    TF_ASSERT_OK_AND_ASSIGN(auto module,
+                            ParseAndReturnVerifiedModule(kHloString));
+    TF_ASSERT_OK_AND_ASSIGN(
+        bool changed, CpuInstructionFusion(&alias_info_).Run(module.get()));
+    EXPECT_FALSE(changed);
+    HloInstruction* root = module->entry_computation()->root_instruction();
+    EXPECT_EQ(root->opcode(), HloOpcode::kExp);
+    EXPECT_EQ(root->operand(0)->opcode(), HloOpcode::kCopy);
+  }
+
+  // Test with tiled emitter disabled.
+  {
+    TF_ASSERT_OK_AND_ASSIGN(auto module,
+                            ParseAndReturnVerifiedModule(kHloString));
+    auto& debug_options = module->mutable_config().mutable_debug_options();
+    (*debug_options.mutable_xla_backend_extra_options())
+        ["xla_cpu_disable_tiled_emitter"] = "";
+
+    TF_ASSERT_OK_AND_ASSIGN(
+        bool changed, CpuInstructionFusion(&alias_info_).Run(module.get()));
+    EXPECT_TRUE(changed);
+    HloInstruction* root = module->entry_computation()->root_instruction();
+    EXPECT_EQ(root->opcode(), HloOpcode::kFusion);
+  }
+}
+
 }  // namespace
 }  // namespace xla::cpu

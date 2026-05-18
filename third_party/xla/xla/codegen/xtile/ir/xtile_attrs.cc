@@ -26,7 +26,13 @@ limitations under the License.
 namespace xla::xtile {
 
 mlir::AffineMap LayoutAttr::getAffineMap() const {
-  return mlir::AffineMap::getPermutationMap(getMinorToMajor(), getContext());
+  auto minor_to_major = getMinorToMajor();
+  llvm::SmallVector<unsigned, 4> permutation;
+  permutation.reserve(minor_to_major.size());
+  for (int64_t dim : llvm::reverse(minor_to_major.asArrayRef())) {
+    permutation.push_back(dim);
+  }
+  return mlir::AffineMap::getPermutationMap(permutation, getContext());
 }
 
 mlir::LogicalResult LayoutAttr::verifyLayout(
