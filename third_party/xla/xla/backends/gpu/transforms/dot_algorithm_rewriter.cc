@@ -39,6 +39,7 @@ limitations under the License.
 #include "xla/status_macros.h"
 #include "xla/tsl/platform/statusor.h"
 #include "xla/xla_data.pb.h"
+#include "tsl/platform/tensor_float_32_utils.h"
 
 namespace xla::gpu {
 
@@ -346,6 +347,9 @@ absl::StatusOr<bool> DotAlgorithmRewriter::RunImpl(
       auto need_to_simulate_tpu_precision = [&]() -> bool {
         if (!default_to_bf16) {
           return false;  // Default to BF16 is disabled by flag.
+        }
+        if (!tsl::tensor_float_32_execution_enabled()) {
+          return false;  // User disabled reduced precision globally.
         }
         if (instruction->shape().element_type() != PrimitiveType::F32) {
           return false;  // Accumulator type is not F32.

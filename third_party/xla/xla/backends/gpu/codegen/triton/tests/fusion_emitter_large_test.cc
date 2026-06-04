@@ -32,6 +32,8 @@ class TritonGemmTest : public HloInterpreterReferenceMixin<HloTestBase> {
   DebugOptions GetDebugOptionsForTest() const override {
     DebugOptions debug_options = HloTestBase::GetDebugOptionsForTest();
     debug_options.set_xla_gpu_cublas_fallback(false);
+    // We want to test pure F32 behavior here, not the simulated BF16 precision.
+    debug_options.set_xla_gpu_default_to_alg_dot_bf16_bf16_f32(false);
     return debug_options;
   }
 };

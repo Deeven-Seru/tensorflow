@@ -58,6 +58,9 @@ class TensorFloat32GlobalVarTest
     } else {
       debug_options.set_xla_gpu_enable_triton_gemm(false);
     }
+    // We want to test pure F32 vs TF32 behavior here based on the global var,
+    // not the simulated BF16 precision.
+    debug_options.set_xla_gpu_default_to_alg_dot_bf16_bf16_f32(false);
     return debug_options;
   }
 };
