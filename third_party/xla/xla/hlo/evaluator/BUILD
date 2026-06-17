@@ -168,6 +168,7 @@ xla_cc_test(
         "//xla/tests:literal_test_util",
         "//xla/tests:test_utils",
         "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:status_matchers",
         "//xla/tsl/platform:statusor",
         "//xla/tsl/platform:test",
         "//xla/tsl/platform:test_benchmark",
