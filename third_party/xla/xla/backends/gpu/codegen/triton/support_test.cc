@@ -140,7 +140,9 @@ bool DoesOpSupportType(HloOpcode opcode, PrimitiveType type) {
       return type == F32 || type == F64;
     case HloOpcode::kDot:
     case HloOpcode::kScaledDot:
-      return type != PRED;
+      // TODO(b/532441997): This should be adjusted to the actually supported
+      // types for ScaledDot.
+      return type != PRED && type != U16;
     case HloOpcode::kBatchNormInference:
     case HloOpcode::kBatchNormTraining:
     case HloOpcode::kBatchNormGrad:
