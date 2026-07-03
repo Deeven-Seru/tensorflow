@@ -60,8 +60,9 @@ __global__ void __launch_bounds__(1024)
                           bool single_maxval, int64_t kMaxIterations) {
   const int32_t max_samples_per_item = 2 * kMaxIterations;
   // Initial offset as given by GPU_1D_KERNEL_LOOP.
-  const int32_t initial_offset = blockIdx.x * blockDim.x + threadIdx.x;
-  gen.Skip(max_samples_per_item * initial_offset);
+  const int64_t initial_offset =
+      static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  gen.Skip(static_cast<uint64_t>(max_samples_per_item) * initial_offset);
   typedef random::UniformDistribution<random::PhiloxRandom, T> Uniform;
   typedef random::NormalDistribution<random::PhiloxRandom, T> Normal;
   Uniform dist;
@@ -85,7 +86,7 @@ __global__ void __launch_bounds__(1024)
   const int32_t samples_between_processed_elements =
       max_samples_per_item * (gridDim.x * blockDim.x);
 
-  GPU_1D_KERNEL_LOOP(offset, num_elements) {
+  for (int64_t offset : ::tensorflow::GpuGridRangeX<int64_t>(num_elements)) {
     // Track how many more samples we need to skip before we process the next
     // element.
     int32_t remaining_samples = samples_between_processed_elements;
