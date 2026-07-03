@@ -123,6 +123,12 @@ class ToTFRecordOp : public AsyncOpKernel {
           iterator->GetNext(&iter_ctx, &components, &end_of_sequence));
 
       if (!end_of_sequence) {
+        if (!TensorShapeUtils::IsScalar(components[0].shape())) {
+          return absl::InvalidArgumentError(absl::StrCat(
+              "ToTFRecordOp currently only supports scalar elements, but got "
+              "shape: ",
+              components[0].shape().DebugString()));
+        }
         TF_RETURN_IF_ERROR(
             writer->WriteRecord(components[0].scalar<tstring>()()));
       }
