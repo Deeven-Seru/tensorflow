@@ -38,17 +38,18 @@ limitations under the License.
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/strings/numbers.h"
 #include "tensorflow/core/platform/logging.h"
+#include "tensorflow/core/platform/macros.h"
 #include "tensorflow/core/util/device_name_utils.h"
 
 namespace tensorflow {
 namespace grappler {
 
-const char kAttrInputSrc[] = "input_source_";
-const char kAttrSrcDevice[] = "send_device";
-const char kAttrDstDevice[] = "recv_device";
-const char kAttrTensorName[] = "tensor_name";
-const char kChannelDevice[] = "Channel";
-const char kStreaming[] = "_streaming";
+TF_CONST_INIT const char kAttrInputSrc[] = "input_source_";
+TF_CONST_INIT const char kAttrSrcDevice[] = "send_device";
+TF_CONST_INIT const char kAttrDstDevice[] = "recv_device";
+TF_CONST_INIT const char kAttrTensorName[] = "tensor_name";
+TF_CONST_INIT const char kChannelDevice[] = "Channel";
+TF_CONST_INIT const char kStreaming[] = "_streaming";
 
 namespace {
 

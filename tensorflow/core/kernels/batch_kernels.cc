@@ -74,10 +74,10 @@ constexpr int64_t kBatchThreadPoolSize = 128;
 }  // namespace
 
 // Per-model inflight batches parameters.
-const int64_t kMinInflightBatches = 1;
-const int64_t kInitialInflightBatches = 2;
-const int64_t kBatchesToAverageOver = 10;
-const int64_t kMaxInflightBatches = 64;
+TF_CONST_INIT const int64_t kMinInflightBatches = 1;
+TF_CONST_INIT const int64_t kInitialInflightBatches = 2;
+TF_CONST_INIT const int64_t kBatchesToAverageOver = 10;
+TF_CONST_INIT const int64_t kMaxInflightBatches = 64;
 
 void RecordBatchSplitUsage(
     std::optional<bool> maybe_enable_large_batch_splitting,

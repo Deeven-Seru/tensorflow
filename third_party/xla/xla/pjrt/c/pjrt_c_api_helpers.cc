@@ -55,6 +55,7 @@ limitations under the License.
 #include "xla/shape_util.h"
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/logging.h"
+#include "xla/tsl/platform/macros.h"
 #include "xla/tsl/platform/statusor.h"
 #include "xla/tsl/protobuf/error_codes.pb.h"
 #include "xla/util.h"
@@ -64,9 +65,9 @@ limitations under the License.
 
 namespace pjrt {
 
-const absl::string_view kHloFormat = "hlo";
-const absl::string_view kMlirFormat = "mlir";
-const absl::string_view kHloWithConfigFormat = "hlo_with_config";
+TF_CONST_INIT const absl::string_view kHloFormat = "hlo";
+TF_CONST_INIT const absl::string_view kMlirFormat = "mlir";
+TF_CONST_INIT const absl::string_view kHloWithConfigFormat = "hlo_with_config";
 
 PJRT_ClientDeleter MakeClientDeleter(const PJRT_Api* api) {
   return [api](PJRT_Client* client) -> void {

@@ -30,6 +30,7 @@ limitations under the License.
 #include "tensorflow/core/framework/tensor.pb.h"
 #include "tensorflow/core/lib/gtl/cleanup.h"
 #include "tensorflow/core/platform/errors.h"
+#include "tensorflow/core/platform/macros.h"
 #include "tensorflow/core/platform/status.h"
 #include "tensorflow/core/platform/types.h"
 #include "tensorflow/core/profiler/lib/traceme.h"
@@ -62,7 +63,7 @@ limitations under the License.
 
 namespace tensorflow {
 namespace tfd {
-const char kOpKernelRunnerCacheResourceName[] =
+TF_CONST_INIT const char kOpKernelRunnerCacheResourceName[] =
     "OpKernelRunnerCacheResourceName";
 
 namespace {
