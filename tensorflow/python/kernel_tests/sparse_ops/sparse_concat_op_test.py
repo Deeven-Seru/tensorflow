@@ -412,6 +412,42 @@ class SparseConcatTest(test.TestCase):
       ):
         self.evaluate(concat_op)
 
+  def testLargeShapeOverflow(self):
+    shape1 = constant_op.constant([2305843009213693952], dtype=dtypes.int64) * 2
+    shape2 = constant_op.constant([2305843009213693952], dtype=dtypes.int64) * 2
+    sp1 = sparse_tensor.SparseTensor(
+        indices=[[0]], values=[1.0], dense_shape=shape1
+    )
+    sp2 = sparse_tensor.SparseTensor(
+        indices=[[0]], values=[1.0], dense_shape=shape2
+    )
+    concat_op = sparse_ops.sparse_concat(axis=0, sp_inputs=[sp1, sp2])
+    with self.assertRaisesOpError("overflowed"):
+      self.evaluate(concat_op)
+
+  def testGPUOutputDenseElementsOverflow(self):
+    if not test.is_gpu_available():
+      self.skipTest("No GPU available to run GPU functor check.")
+
+    with self.session(use_gpu=True):
+      shape1 = (
+          constant_op.constant([2, 2, 1000000000000000000], dtype=dtypes.int64)
+          * 2
+      )
+      shape2 = (
+          constant_op.constant([2, 2, 1000000000000000000], dtype=dtypes.int64)
+          * 2
+      )
+      sp1 = sparse_tensor.SparseTensor(
+          indices=[[0, 0, 0]], values=[1.0], dense_shape=shape1
+      )
+      sp2 = sparse_tensor.SparseTensor(
+          indices=[[0, 0, 0]], values=[1.0], dense_shape=shape2
+      )
+      concat_op = sparse_ops.sparse_concat(axis=0, sp_inputs=[sp1, sp2])
+      with self.assertRaisesOpError("dense_elements overflowed"):
+        self.evaluate(concat_op)
+
 
 if __name__ == "__main__":
   test.main()
