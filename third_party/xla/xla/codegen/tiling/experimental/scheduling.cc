@@ -115,16 +115,17 @@ std::string Schedule::ToString() const {
   std::vector<std::string> expr_strs;
   expr_strs.reserve(dim_ids.size());
   for (int64_t dim_id : dim_ids) {
-    expr_strs.push_back(
-        absl::StrFormat("d%d -> %s", dim_id,
-                        dim_id_to_pid_expr.at(dim_id).ToString({"pid"}, {})));
+    expr_strs.push_back(absl::StrFormat(
+        "d%d -> %s", dim_id,
+        dim_id_to_pid_expr.at(dim_id).ToString({"pid", "tid"}, {})));
   }
-  return absl::StrCat(absl::StrJoin(expr_strs, ", "),
-                      ", pid_bounds=", pid_bounds.ToString());
+  return absl::StrFormat("%s, pid_bounds=%s, num_tiles_per_pid=%d",
+                         absl::StrJoin(expr_strs, ", "), pid_bounds.ToString(),
+                         num_tiles_per_pid);
 }
 
 absl::StatusOr<Schedule> GetSchedule(
-    const TiledHloComputation& tiled_computation) {
+    const TiledHloComputation& tiled_computation, int64_t num_tiles_per_pid) {
   // Compute the block counts for each parallel dimension.
   llvm::SmallVector<int64_t, 4> parallel_dim_block_counts;
   llvm::SmallVector<int64_t, 4> parallel_dim_ids;
@@ -148,15 +149,23 @@ absl::StatusOr<Schedule> GetSchedule(
   }
 
   mlir::MLIRContext* ctx = tiled_computation.GetMLIRContext();
-  SymbolicExpr pid = CreateDimExpr(0, ctx);
+  SymbolicExpr program_id = CreateDimExpr(0, ctx);
+  SymbolicExpr global_tile_id = program_id;
+  if (num_tiles_per_pid > 1) {
+    SymbolicExpr tile_id = CreateDimExpr(1, ctx);
+    global_tile_id = program_id * num_tiles_per_pid + tile_id;
+  }
   llvm::SmallVector<SymbolicExpr, 4> delinearized_pid =
-      DelinearizeIndex(parallel_dim_block_counts, pid, ctx);
+      DelinearizeIndex(parallel_dim_block_counts, global_tile_id, ctx);
   Schedule schedule;
   for (const auto& [parallel_dim_id, expr] :
        llvm::zip(parallel_dim_ids, delinearized_pid)) {
     schedule.dim_id_to_pid_expr[parallel_dim_id] = expr;
   }
-  schedule.pid_bounds = Interval{0, Product(parallel_dim_block_counts) - 1};
+  schedule.pid_bounds = Interval{
+      0,
+      CeilOfRatio(Product(parallel_dim_block_counts), num_tiles_per_pid) - 1};
+  schedule.num_tiles_per_pid = num_tiles_per_pid;
   return schedule;
 }
 

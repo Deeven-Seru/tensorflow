@@ -30,11 +30,22 @@ namespace xla::gpu::experimental {
 
 struct Schedule {
   // Maps from the parallel dimension ID to the symbolic expression that depends
-  // on the program ID.
+  // on the program ID and the tile ID.
+  //
+  // On GPU the program ID corresponds to the block ID and the tile ID
+  // corresponds to the induction variable of the scf.for loop over the tiles
+  // within the block.
+  //
+  // On CPU the program ID corresponds to the thread ID and the tile ID
+  // corresponds to the induction variable of the scf.for loop over the tiles
+  // within the thread.
   llvm::MapVector<int64_t, SymbolicExpr> dim_id_to_pid_expr;
 
   // The bounds of the program ID.
   Interval pid_bounds;
+
+  // The number of tiles per program ID.
+  int64_t num_tiles_per_pid = 1;
 
   // This allows GUnit to print the tile.
   template <typename Sink>
@@ -53,7 +64,8 @@ struct Schedule {
 
 // Returns a map from pid to the tile indices.
 absl::StatusOr<Schedule> GetSchedule(
-    const TiledHloComputation& tiled_computation);
+    const TiledHloComputation& tiled_computation,
+    int64_t num_tiles_per_pid = 1);
 
 }  // namespace xla::gpu::experimental
 
