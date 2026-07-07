@@ -589,6 +589,18 @@ cc_library(
 )
 
 cc_library(
+    name = "pjrt_compiler_variant",
+    srcs = ["pjrt_compiler_variant.cc"],
+    hdrs = ["pjrt_compiler_variant.h"],
+    visibility = internal_visibility([":friends"]),
+    deps = [
+        "@com_google_absl//absl/base:nullability",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings:string_view",
+    ],
+)
+
+cc_library(
     name = "pjrt_compiler",
     srcs = ["pjrt_compiler.cc"],
     hdrs = ["pjrt_compiler.h"],
