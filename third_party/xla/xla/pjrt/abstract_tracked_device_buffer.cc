@@ -53,6 +53,38 @@ Future<> AbstractTrackedDeviceBuffer::GetReadyFuture(
     PjRtMemorySpace* memory_space) {
   auto* client = absl::down_cast<CommonPjRtClient*>(memory_space->client());
 
+  if (!client->event_tracking_enabled()) {
+    bool all_ready = true;
+    absl::Status fast_status;
+    if (raw_buffer() && client->include_raw_buffer_in_ready_event()) {
+      PjRtDeviceEventPtr alloc_event = raw_buffer()->GetRawBufferAsyncValue();
+      if (alloc_event) {
+        if (!alloc_event.async_value()->IsConcrete()) {
+          all_ready = false;
+        } else if (auto error = alloc_event.GetErrorIfPresent()) {
+          fast_status.Update(absl::Status(
+              absl::StatusCode::kFailedPrecondition,
+              absl::StrCat("Error in buffer allocation: ", error->message())));
+        }
+      }
+    }
+    if (all_ready) {
+      for (const auto& ev : definition_events()) {
+        if (ev) {
+          if (!ev.async_value()->IsConcrete()) {
+            all_ready = false;
+            break;
+          } else if (auto error = ev.GetErrorIfPresent()) {
+            fast_status.Update(*error);
+          }
+        }
+      }
+    }
+    if (all_ready) {
+      return Future<>(std::move(fast_status));
+    }
+  }
+
   auto [definition_promise, definition_future] = tsl::MakePromise<void>();
   client->TrackFuture(memory_space, "BufferDefinitionEvent", definition_future);
 
