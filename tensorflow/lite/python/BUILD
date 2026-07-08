@@ -1,4 +1,5 @@
 load("@flatbuffers//:build_defs.bzl", "flatbuffer_py_library")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("@xla//third_party/rules_python/python:py_binary.bzl", "py_binary")
 load("@xla//third_party/rules_python/python:py_library.bzl", "py_library")
@@ -65,6 +66,13 @@ py_test(
         "//tensorflow/lite/python/testdata:interpreter_test_data",
         "//tensorflow/lite/python/testdata:test_delegate.so",
     ],
+    exec_properties = if_oss(
+        None,
+        select({
+            "@bazel_tools//tools/cpp:asan_build": {"cpp_link.mem": "20g"},
+            "//conditions:default": None,
+        }),
+    ),
     # Static linking is required because this loads a cc_binary as a shared
     # library, which would otherwise create ODR violations.
     # copybara:uncomment linking_mode = "static",
@@ -74,10 +82,10 @@ py_test(
     ],
     deps = [
         ":interpreter",
+        ":lite",
         #internal proto upb dep
         "//third_party/py/numpy",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/lite/python:lite",
         "//tensorflow/lite/python/metrics",
         "//tensorflow/lite/python/testdata:_pywrap_test_registerer",
         "//tensorflow/python/framework:test_lib",
@@ -92,9 +100,9 @@ py_binary(
     strict_deps = True,
     visibility = ["//visibility:public"],
     deps = [
+        ":lite",
         ":tflite_convert_main_lib",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/lite/python:lite",
         "@absl_py//absl:app",
     ],
 )
@@ -438,11 +446,11 @@ py_test(
         "no_windows",
     ],
     deps = [
+        ":lite",
         ":util",
         #internal proto upb dep
         "//third_party/py/numpy",
         "//tensorflow:tensorflow_py",
-        "//tensorflow/lite/python:lite",
         "//tensorflow/lite/tools:flatbuffer_utils",
         "//tensorflow/python/client:session",
         "//tensorflow/python/framework:convert_to_constants",
@@ -508,6 +516,15 @@ pytype_strict_library(
     ] + if_pywrap(
         if_true = [":pywrap_tflite"],
     ),
+)
+
+pytype_strict_library(
+    name = "wrap_toco",
+    srcs = ["wrap_toco.py"],
+    deps = [
+        "//tensorflow/python",
+        "//tensorflow/python:pywrap_tensorflow",
+    ],
 )
 
 py_library(
@@ -670,12 +687,19 @@ py_test(
         "//tensorflow/lite:testdata/conv_huge_im2col.bin",
         "//tensorflow/lite:testdata/multi_add_flex.bin",
     ],
+    exec_properties = if_oss(
+        None,
+        select({
+            "@bazel_tools//tools/cpp:asan_build": {"cpp_link.mem": "20g"},
+            "//conditions:default": None,
+        }),
+    ),
     strict_deps = True,
     deps = [
         ":analyzer",
+        ":lite",
         #internal proto upb dep
         "//tensorflow:tensorflow_py",
-        "//tensorflow/lite/python:lite",
         "//tensorflow/python/framework:test_lib",
         "//tensorflow/python/platform:client_testlib",
         "//tensorflow/python/platform:resource_loader",
@@ -728,4 +752,10 @@ pywrap_library(
 pywrap_binaries(
     name = "pywrap_tflite_binaries",
     dep = ":pywrap_tflite",
+)
+
+cc_library(
+    name = "dummy_pybind",
+    srcs = ["dummy_pybind.cc"],
+    alwayslink = 1,
 )
