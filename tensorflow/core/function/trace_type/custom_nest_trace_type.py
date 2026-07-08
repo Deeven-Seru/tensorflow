@@ -16,7 +16,7 @@
 
 from typing import Any, Iterator, List as PythonList, Optional, Sequence, Tuple as PythonTuple, Type
 
-from tensorflow.core.function.trace_type import util
+import tensorflow.core.function.trace_type.util as util
 from tensorflow.python.types import trace
 from tensorflow.python.util import custom_nest_protocol
 

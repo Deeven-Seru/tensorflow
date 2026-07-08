@@ -18,7 +18,7 @@ import abc
 from typing import Type
 
 from google.protobuf import message
-from tensorflow.core.function.trace_type import serialization_pb2
+import tensorflow.core.function.trace_type.serialization_pb2 as serialization_pb2
 
 SerializedTraceType = serialization_pb2.SerializedTraceType
 

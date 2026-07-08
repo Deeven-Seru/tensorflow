@@ -18,9 +18,9 @@ import collections.abc
 from typing import Any, Dict, Hashable, Optional
 import weakref
 
-from tensorflow.core.function.trace_type import custom_nest_trace_type
-from tensorflow.core.function.trace_type import default_types
-from tensorflow.core.function.trace_type import util
+import tensorflow.core.function.trace_type.custom_nest_trace_type as custom_nest_trace_type
+import tensorflow.core.function.trace_type.default_types as default_types
+import tensorflow.core.function.trace_type.util as util
 from tensorflow.python.types import trace
 from tensorflow.python.util import custom_nest_protocol
 

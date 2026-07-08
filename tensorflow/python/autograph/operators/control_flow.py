@@ -61,8 +61,8 @@ import traceback
 
 import numpy as np
 
-from tensorflow.python.autograph.operators import py_builtins
-from tensorflow.python.autograph.operators import variables
+import tensorflow.python.autograph.operators.py_builtins as py_builtins
+import tensorflow.python.autograph.operators.variables as variables
 from tensorflow.python.autograph.utils import ag_logging
 from tensorflow.python.autograph.utils import misc
 from tensorflow.python.autograph.utils import tensors

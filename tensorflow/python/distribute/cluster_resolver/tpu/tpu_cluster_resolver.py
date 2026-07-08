@@ -18,7 +18,7 @@ import collections
 import re
 
 from tensorflow.core.protobuf.tpu import topology_pb2
-from tensorflow.python.distribute.cluster_resolver import cluster_resolver as cluster_resolver_lib
+import tensorflow.python.distribute.cluster_resolver.cluster_resolver as cluster_resolver_lib
 from tensorflow.python.eager import remote
 from tensorflow.python.framework import config as framework_config
 from tensorflow.python.framework import errors

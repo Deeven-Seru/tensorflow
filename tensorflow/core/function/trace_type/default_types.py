@@ -20,9 +20,9 @@ import numbers
 from typing import Any, Dict as PythonDict, Hashable, List as PythonList, Optional, Sequence, Tuple as PythonTuple, Type
 import weakref
 
-from tensorflow.core.function.trace_type import default_types_pb2
-from tensorflow.core.function.trace_type import serialization
-from tensorflow.core.function.trace_type import util
+import tensorflow.core.function.trace_type.default_types_pb2 as default_types_pb2
+import tensorflow.core.function.trace_type.serialization as serialization
+import tensorflow.core.function.trace_type.util as util
 from tensorflow.python.types import trace
 
 # Register the TraceType of Tensor (aka TensorSpec) to avoid cyclic dependency.
