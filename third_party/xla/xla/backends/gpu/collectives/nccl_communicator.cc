@@ -49,6 +49,7 @@ limitations under the License.
 #include "xla/backends/gpu/collectives/nccl_symmetric_memory.h"
 #include "xla/backends/gpu/collectives/nccl_types.h"
 #include "xla/backends/gpu/collectives/single_threaded_executor.h"
+#include "xla/backends/gpu/runtime/collective_kernel_api.h"
 #include "xla/core/collectives/communicator.h"
 #include "xla/core/collectives/rank_id.h"
 #include "xla/core/collectives/reduction_kind.h"
@@ -58,11 +59,13 @@ limitations under the License.
 #include "xla/primitive_util.h"
 #include "xla/stream_executor/device_address.h"
 #include "xla/stream_executor/kernel_args.h"
+#include "xla/stream_executor/memory_allocation.h"
 #include "xla/stream_executor/stream.h"
 #include "xla/stream_executor/stream_executor.h"
 #include "xla/tsl/concurrency/executor.h"
 #include "xla/tsl/platform/env.h"
 #include "xla/tsl/platform/logging.h"
+#include "xla/tsl/util/tied_ref.h"
 #include "xla/util.h"
 #include "xla/xla_data.pb.h"
 
@@ -82,11 +85,11 @@ se::Stream* ToStream(const Communicator::Executor& executor) {
 }
 
 NcclCapabilities GetCapabilities(std::shared_ptr<NcclCommState> comm_state) {
+#if NCCL_VERSION_CODE >= 22907
   bool support_device_comm = false;
   bool support_one_sided_comm = false;
   std::string one_sided_comm_unsupported_reason = "";
 
-#if NCCL_VERSION_CODE >= 22907
   ncclCommProperties_t props = NCCL_COMM_PROPERTIES_INITIALIZER;
   {
     absl::MutexLock lock(comm_state->mutex);
@@ -341,6 +344,20 @@ absl::StatusOr<size_t> NcclCommunicator::NumRanks() const {
     absl::MutexLock lock(comm_->mutex);
     XLA_NCCL_RETURN_IF_ERROR(ncclCommCount(comm_->comm, &count));
     return count;
+  });
+}
+
+absl::StatusOr<size_t> NcclCommunicator::CurrentRank() {
+  return ExecuteAwait<size_t>([this]() -> absl::StatusOr<size_t> {
+    VLOG(5) << "Get the rank in NCCL communicator: " << *this;
+    if (cancel_->IsCancelled()) {
+      return FailedPrecondition("NcclCommunicator aborted");
+    }
+
+    int32_t rank = 0;
+    absl::MutexLock lock(comm_->mutex);
+    XLA_NCCL_RETURN_IF_ERROR(ncclCommUserRank(comm_->comm, &rank));
+    return rank;
   });
 }
 
@@ -871,12 +888,11 @@ absl::Status NcclCommunicator::LaunchPut(se::DeviceAddressBase send_buffer,
   if (cancel_->IsCancelled()) {
     return FailedPrecondition("NcclCommunicator aborted");
   }
+
+#if NCCL_VERSION_CODE >= 22900
   se::Stream* stream = ToStream(executor);
 
   auto& peer_win = absl::down_cast<NcclSymmetricMemory&>(*recv_buffer);
-
-#if NCCL_VERSION_CODE >= 22900
-
   {
     absl::MutexLock lock(comm_->mutex);
     VLOG(3) << absl::StreamFormat(
@@ -906,11 +922,11 @@ absl::Status NcclCommunicator::LaunchSignal(RankId peer,
   if (cancel_->IsCancelled()) {
     return FailedPrecondition("NcclCommunicator aborted");
   }
+
+#if NCCL_VERSION_CODE >= 22900
   se::Stream* stream = ToStream(executor);
 
   const auto& nccl_desc = absl::down_cast<const GpuSignalDesc&>(signal_desc);
-
-#if NCCL_VERSION_CODE >= 22900
   {
     absl::MutexLock lock(comm_->mutex);
     VLOG(3) << absl::StreamFormat(
@@ -940,11 +956,12 @@ absl::Status NcclCommunicator::LaunchWaitSignal(RankId peer, int op_cnt,
   if (cancel_->IsCancelled()) {
     return FailedPrecondition("NcclCommunicator aborted");
   }
+
+#if NCCL_VERSION_CODE >= 22900
   se::Stream* stream = ToStream(executor);
 
   const auto& nccl_desc = absl::down_cast<const GpuSignalDesc&>(signal_desc);
 
-#if NCCL_VERSION_CODE >= 22900
   ncclWaitSignalDesc_t desc;
   desc.peer = peer.value();
   desc.opCnt = op_cnt;
@@ -968,6 +985,38 @@ absl::Status NcclCommunicator::LaunchWaitSignal(RankId peer, int op_cnt,
     RETURN_IF_ERROR(PollUntilDone());
   }
   return absl::OkStatus();
+}
+
+absl::Status NcclCommunicator::LaunchMultiGpuBarrier(const Executor& executor) {
+  if (!IsCrossDeviceBarrierInitiated()) {
+    return FailedPrecondition(
+        "Cross device barrier buffers are not set on this communicator. Did "
+        "you set use_cross_device_barrier=true in BarrierRequirements?");
+  }
+  absl::MutexLock lock(barrier_mu_);
+  if (cancel_->IsCancelled()) {
+    return FailedPrecondition("NcclCommunicator aborted");
+  }
+  se::Stream* stream = ToStream(executor);
+  ASSIGN_OR_RETURN(size_t num_ranks, NumRanks());
+  ASSIGN_OR_RETURN(size_t current_rank, CurrentRank());
+
+  return xla::gpu::LaunchMultiGpuBarrierWithNccl(
+      stream, num_ranks, RankId(current_rank),
+      tied_cross_device_barrier_symmetric_memory_.Lock().get(),
+      tied_cross_device_barrier_signal_value_.Lock()->address());
+}
+
+void NcclCommunicator::InitializeCrossDeviceBarrier(
+    tsl::TiedRef<se::MemoryAllocation> tied_signal_value,
+    tsl::TiedRef<se::MemoryAllocation> tied_signal,
+    tsl::TiedRef<SymmetricMemory> tied_symmetric_memory) {
+  absl::MutexLock lock(barrier_mu_);
+  is_cross_device_barrier_initiated_ = true;
+  tied_cross_device_barrier_signal_value_ = std::move(tied_signal_value);
+  tied_cross_device_barrier_signal_ = std::move(tied_signal);
+  tied_cross_device_barrier_symmetric_memory_ =
+      std::move(tied_symmetric_memory);
 }
 
 std::string NcclCommunicator::ToString() const {
