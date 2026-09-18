@@ -22,6 +22,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <atomic>
+#include <type_traits>
 
 #include "unsupported/Eigen/CXX11/Tensor"  // from @eigen_archive
 
@@ -146,13 +147,21 @@ struct ScatterNdFunctor<CPUDevice, T, Index, OP, IXDIM> {
         if constexpr (OP == scatter_nd_op::UpdateOp::ASSIGN) {
           out_data[i] = update_data[loc];
         } else if constexpr (OP == scatter_nd_op::UpdateOp::ADD) {
-          out_data[i] += update_data[loc];
+          if constexpr (!std::is_same_v<T, tstring>) {
+            out_data[i] += update_data[loc];
+          }
         } else if constexpr (OP == scatter_nd_op::UpdateOp::SUB) {
-          out_data[i] -= update_data[loc];
+          if constexpr (!std::is_same_v<T, tstring>) {
+            out_data[i] -= update_data[loc];
+          }
         } else if constexpr (OP == scatter_nd_op::UpdateOp::MIN) {
-          out_data[i] = std::min(out_data[i], update_data[loc]);
+          if constexpr (!std::is_same_v<T, tstring>) {
+            out_data[i] = std::min(out_data[i], update_data[loc]);
+          }
         } else if constexpr (OP == scatter_nd_op::UpdateOp::MAX) {
-          out_data[i] = std::max(out_data[i], update_data[loc]);
+          if constexpr (!std::is_same_v<T, tstring>) {
+            out_data[i] = std::max(out_data[i], update_data[loc]);
+          }
         }
       }
     } else {
