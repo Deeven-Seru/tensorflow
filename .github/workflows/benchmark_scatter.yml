@@ -21,6 +21,14 @@ jobs:
         chmod +x bazelisk-linux-amd64
         sudo mv bazelisk-linux-amd64 /usr/local/bin/bazel
 
+    - name: Mount Bazel Cache
+      uses: actions/cache@v4
+      with:
+        path: "~/.cache/bazel"
+        key: bazel-${{ runner.os }}-${{ hashFiles('.bazelversion', '.bazelrc', 'WORKSPACE', 'WORKSPACE.bazel', 'MODULE.bazel') }}
+        restore-keys: |
+          bazel-${{ runner.os }}-
+
     - name: Run Benchmark
       run: |
         bazel run -c opt //tensorflow/core/kernels:scatter_nd_op_test_cpu -- --benchmarks=BM_ScatterNdUpdateInt32
