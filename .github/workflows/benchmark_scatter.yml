@@ -1,0 +1,26 @@
+name: ScatterNd Benchmark
+
+on:
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install Bazelisk
+      run: |
+        wget https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
+        chmod +x bazelisk-linux-amd64
+        sudo mv bazelisk-linux-amd64 /usr/local/bin/bazel
+
+    - name: Run Benchmark
+      run: |
+        bazel run -c opt //tensorflow/core/kernels:scatter_nd_op_test_cpu -- --benchmarks=BM_ScatterNdUpdateInt32
