@@ -143,15 +143,15 @@ struct ScatterNdFunctor<CPUDevice, T, Index, OP, IXDIM> {
           error_loc = loc;
           continue;
         }
-        if (OP == scatter_nd_op::UpdateOp::ASSIGN) {
+        if constexpr (OP == scatter_nd_op::UpdateOp::ASSIGN) {
           out_data[i] = update_data[loc];
-        } else if (OP == scatter_nd_op::UpdateOp::ADD) {
+        } else if constexpr (OP == scatter_nd_op::UpdateOp::ADD) {
           out_data[i] += update_data[loc];
-        } else if (OP == scatter_nd_op::UpdateOp::SUB) {
+        } else if constexpr (OP == scatter_nd_op::UpdateOp::SUB) {
           out_data[i] -= update_data[loc];
-        } else if (OP == scatter_nd_op::UpdateOp::MIN) {
+        } else if constexpr (OP == scatter_nd_op::UpdateOp::MIN) {
           out_data[i] = std::min(out_data[i], update_data[loc]);
-        } else if (OP == scatter_nd_op::UpdateOp::MAX) {
+        } else if constexpr (OP == scatter_nd_op::UpdateOp::MAX) {
           out_data[i] = std::max(out_data[i], update_data[loc]);
         }
       }
