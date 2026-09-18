@@ -31,4 +31,4 @@ jobs:
 
     - name: Run Benchmark
       run: |
-        bazel run -c opt //tensorflow/core/kernels:scatter_nd_op_test_cpu -- --benchmarks=BM_ScatterNdUpdateInt32
+        bazel run -c opt //tensorflow/core/kernels:scatter_nd_op_test_cpu -- --benchmark_filter=BM_ScatterNdUpdateInt32
