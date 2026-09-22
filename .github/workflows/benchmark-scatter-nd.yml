@@ -56,13 +56,11 @@ jobs:
         run: |
           bazel run -c opt \
             --config=nogcp \
-            --config=noaws \
-            --config=nohdfs \
-            --define=no_nccl_support=true \
+            --config=nonccl \
             --jobs=4 \
             --local_ram_resources=HOST_RAM*0.7 \
             //tensorflow/core/kernels:scatter_nd_op_test -- \
-            --benchmarks=BM_ScatterNd \
+            --benchmark_filter=BM_ScatterNd \
             --benchmark_out=/tmp/cc_baseline.json \
             --benchmark_out_format=json
           cat /tmp/cc_baseline.json
@@ -116,13 +114,11 @@ jobs:
         run: |
           bazel run -c opt \
             --config=nogcp \
-            --config=noaws \
-            --config=nohdfs \
-            --define=no_nccl_support=true \
+            --config=nonccl \
             --jobs=4 \
             --local_ram_resources=HOST_RAM*0.7 \
             //tensorflow/core/kernels:scatter_nd_op_test -- \
-            --benchmarks=BM_ScatterNd \
+            --benchmark_filter=BM_ScatterNd \
             --benchmark_out=/tmp/cc_optimized.json \
             --benchmark_out_format=json
           cat /tmp/cc_optimized.json
@@ -302,9 +298,7 @@ jobs:
             --repo_env=WHEEL_NAME=tensorflow_cpu \
             --config=opt \
             --config=nogcp \
-            --config=noaws \
-            --config=nohdfs \
-            --define=no_nccl_support=true \
+            --config=nonccl \
             --jobs=4 \
             --local_ram_resources=HOST_RAM*0.7
 
@@ -428,9 +422,7 @@ jobs:
             --repo_env=WHEEL_NAME=tensorflow_cpu \
             --config=opt \
             --config=nogcp \
-            --config=noaws \
-            --config=nohdfs \
-            --define=no_nccl_support=true \
+            --config=nonccl \
             --jobs=4 \
             --local_ram_resources=HOST_RAM*0.7
 
