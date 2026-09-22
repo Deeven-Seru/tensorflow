@@ -1,0 +1,338 @@
+name: ScatterNd Benchmark (Before vs After)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - benchmark-scatter-nd
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark-baseline:
+    name: Baseline (master)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y patchelf
+
+      - name: Install Bazelisk
+        run: |
+          wget -q https://github.com/bazelbuild/bazelisk/releases/download/v1.25.0/bazelisk-linux-amd64 -O /usr/local/bin/bazel
+          chmod +x /usr/local/bin/bazel
+
+      - name: Build TF pip package (CPU only)
+        run: |
+          python -m pip install numpy packaging requests
+          # Configure for CPU-only build
+          export TF_NEED_CUDA=0
+          export TF_NEED_ROCM=0
+          export CC_OPT_FLAGS="-march=native"
+          export PYTHON_BIN_PATH=$(which python)
+          export USE_DEFAULT_PYTHON_LIB_PATH=1
+          export TF_SET_ANDROID_WORKSPACE=0
+          export TF_CONFIGURE_IOS=0
+          yes "" | python configure.py || true
+          
+          # Build the pip package
+          bazel build //tensorflow/tools/pip_package:wheel \
+            --repo_env=WHEEL_NAME=tensorflow_cpu \
+            --config=opt \
+            --config=nogcp \
+            --config=noaws \
+            --config=nohdfs \
+            --define=no_nccl_support=true \
+            --jobs=4 \
+            --local_ram_resources=HOST_RAM*.5 \
+            --profile=build_output/profile.json.gz
+
+      - name: Install built TF
+        run: |
+          pip install $(find bazel-bin/tensorflow/tools/pip_package/ -name "*.whl") --force-reinstall
+
+      - name: Write benchmark script
+        run: |
+          cat << 'BENCH' > /tmp/scatter_benchmark.py
+          import tensorflow as tf
+          import numpy as np
+          import time, json, os
+          os.environ["CUDA_VISIBLE_DEVICES"] = ""
+          
+          def bench(name, fn, iters=1000, warmup=100):
+              for _ in range(warmup): fn()
+              times = []
+              for _ in range(iters):
+                  s = time.perf_counter()
+                  fn()
+                  times.append((time.perf_counter() - s) * 1000)
+              t = np.array(times)
+              return {"name": name, "mean_ms": round(float(np.mean(t)), 4),
+                      "median_ms": round(float(np.median(t)), 4),
+                      "p5_ms": round(float(np.percentile(t, 5)), 4),
+                      "p95_ms": round(float(np.percentile(t, 95)), 4),
+                      "p99_ms": round(float(np.percentile(t, 99)), 4)}
+          
+          results = []
+          with tf.device("/CPU:0"):
+              for op_name, op_fn_factory in [
+                  ("scatter_nd", lambda b, s, v: (
+                      lambda idx=tf.random.uniform([b,1],0,v,tf.int32),
+                             upd=tf.random.uniform([b] if s==1 else [b,s]),
+                             sh=tf.constant([v] if s==1 else [v,s], tf.int32):
+                      tf.scatter_nd(idx, upd, sh))),
+                  ("tensor_scatter_nd_update", lambda b, s, v: (
+                      lambda idx=tf.random.uniform([b,1],0,v,tf.int32),
+                             upd=tf.random.uniform([b] if s==1 else [b,s]),
+                             ten=tf.zeros([v] if s==1 else [v,s]):
+                      tf.tensor_scatter_nd_update(ten, idx, upd))),
+                  ("tensor_scatter_nd_add", lambda b, s, v: (
+                      lambda idx=tf.random.uniform([b,1],0,v,tf.int32),
+                             upd=tf.random.uniform([b] if s==1 else [b,s]),
+                             ten=tf.zeros([v] if s==1 else [v,s]):
+                      tf.tensor_scatter_nd_add(ten, idx, upd))),
+              ]:
+                  for batch in [10000, 50000, 100000]:
+                      for slc in [1, 8, 32, 64]:
+                          fn = tf.function(op_fn_factory(batch, slc, 500000), jit_compile=False)
+                          r = bench(f"{op_name}|batch={batch}|slice={slc}", fn)
+                          results.append(r)
+                          print(f"  {r['name']:<55} mean={r['mean_ms']:8.3f}ms  median={r['median_ms']:8.3f}ms")
+          
+          with open("benchmark_results.json", "w") as f:
+              json.dump({"tf_version": tf.__version__, "results": results}, f, indent=2)
+          print(f"\nTF Version: {tf.__version__}")
+          print(f"Total benchmarks: {len(results)}")
+          BENCH
+
+      - name: Run benchmark
+        run: cd /tmp && python scatter_benchmark.py
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-results
+          path: /tmp/benchmark_results.json
+
+  benchmark-optimized:
+    name: Optimized (optimize-scatter-nd)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+    steps:
+      - name: Checkout optimized branch
+        uses: actions/checkout@v4
+        with:
+          ref: optimize-scatter-nd
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y patchelf
+
+      - name: Install Bazelisk
+        run: |
+          wget -q https://github.com/bazelbuild/bazelisk/releases/download/v1.25.0/bazelisk-linux-amd64 -O /usr/local/bin/bazel
+          chmod +x /usr/local/bin/bazel
+
+      - name: Build TF pip package (CPU only)
+        run: |
+          python -m pip install numpy packaging requests
+          export TF_NEED_CUDA=0
+          export TF_NEED_ROCM=0
+          export CC_OPT_FLAGS="-march=native"
+          export PYTHON_BIN_PATH=$(which python)
+          export USE_DEFAULT_PYTHON_LIB_PATH=1
+          export TF_SET_ANDROID_WORKSPACE=0
+          export TF_CONFIGURE_IOS=0
+          yes "" | python configure.py || true
+          
+          bazel build //tensorflow/tools/pip_package:wheel \
+            --repo_env=WHEEL_NAME=tensorflow_cpu \
+            --config=opt \
+            --config=nogcp \
+            --config=noaws \
+            --config=nohdfs \
+            --define=no_nccl_support=true \
+            --jobs=4 \
+            --local_ram_resources=HOST_RAM*.5 \
+            --profile=build_output/profile.json.gz
+
+      - name: Install built TF
+        run: |
+          pip install $(find bazel-bin/tensorflow/tools/pip_package/ -name "*.whl") --force-reinstall
+
+      - name: Write benchmark script
+        run: |
+          cat << 'BENCH' > /tmp/scatter_benchmark.py
+          import tensorflow as tf
+          import numpy as np
+          import time, json, os
+          os.environ["CUDA_VISIBLE_DEVICES"] = ""
+          
+          def bench(name, fn, iters=1000, warmup=100):
+              for _ in range(warmup): fn()
+              times = []
+              for _ in range(iters):
+                  s = time.perf_counter()
+                  fn()
+                  times.append((time.perf_counter() - s) * 1000)
+              t = np.array(times)
+              return {"name": name, "mean_ms": round(float(np.mean(t)), 4),
+                      "median_ms": round(float(np.median(t)), 4),
+                      "p5_ms": round(float(np.percentile(t, 5)), 4),
+                      "p95_ms": round(float(np.percentile(t, 95)), 4),
+                      "p99_ms": round(float(np.percentile(t, 99)), 4)}
+          
+          results = []
+          with tf.device("/CPU:0"):
+              for op_name, op_fn_factory in [
+                  ("scatter_nd", lambda b, s, v: (
+                      lambda idx=tf.random.uniform([b,1],0,v,tf.int32),
+                             upd=tf.random.uniform([b] if s==1 else [b,s]),
+                             sh=tf.constant([v] if s==1 else [v,s], tf.int32):
+                      tf.scatter_nd(idx, upd, sh))),
+                  ("tensor_scatter_nd_update", lambda b, s, v: (
+                      lambda idx=tf.random.uniform([b,1],0,v,tf.int32),
+                             upd=tf.random.uniform([b] if s==1 else [b,s]),
+                             ten=tf.zeros([v] if s==1 else [v,s]):
+                      tf.tensor_scatter_nd_update(ten, idx, upd))),
+                  ("tensor_scatter_nd_add", lambda b, s, v: (
+                      lambda idx=tf.random.uniform([b,1],0,v,tf.int32),
+                             upd=tf.random.uniform([b] if s==1 else [b,s]),
+                             ten=tf.zeros([v] if s==1 else [v,s]):
+                      tf.tensor_scatter_nd_add(ten, idx, upd))),
+              ]:
+                  for batch in [10000, 50000, 100000]:
+                      for slc in [1, 8, 32, 64]:
+                          fn = tf.function(op_fn_factory(batch, slc, 500000), jit_compile=False)
+                          r = bench(f"{op_name}|batch={batch}|slice={slc}", fn)
+                          results.append(r)
+                          print(f"  {r['name']:<55} mean={r['mean_ms']:8.3f}ms  median={r['median_ms']:8.3f}ms")
+          
+          with open("benchmark_results.json", "w") as f:
+              json.dump({"tf_version": tf.__version__, "results": results}, f, indent=2)
+          print(f"\nTF Version: {tf.__version__}")
+          print(f"Total benchmarks: {len(results)}")
+          BENCH
+
+      - name: Run benchmark
+        run: cd /tmp && python scatter_benchmark.py
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: optimized-results
+          path: /tmp/benchmark_results.json
+
+  compare:
+    name: Compare Results
+    needs: [benchmark-baseline, benchmark-optimized]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download baseline
+        uses: actions/download-artifact@v4
+        with:
+          name: baseline-results
+          path: baseline
+
+      - name: Download optimized
+        uses: actions/download-artifact@v4
+        with:
+          name: optimized-results
+          path: optimized
+
+      - name: Compare and report
+        run: |
+          python3 << 'COMPARE'
+          import json
+          
+          with open("baseline/benchmark_results.json") as f:
+              baseline = json.load(f)
+          with open("optimized/benchmark_results.json") as f:
+              optimized = json.load(f)
+          
+          base_map = {r["name"]: r for r in baseline["results"]}
+          opt_map = {r["name"]: r for r in optimized["results"]}
+          
+          print("=" * 120)
+          print(f"  ScatterNd CPU Benchmark: BEFORE vs AFTER")
+          print(f"  Baseline TF: {baseline['tf_version']}  |  Optimized TF: {optimized['tf_version']}")
+          print("=" * 120)
+          print(f"  {'Benchmark':<55} {'Baseline':>10} {'Optimized':>10} {'Speedup':>10} {'Change':>10}")
+          print("-" * 120)
+          
+          for name in base_map:
+              b = base_map[name]["median_ms"]
+              o = opt_map[name]["median_ms"]
+              speedup = b / o if o > 0 else float('inf')
+              change = ((b - o) / b) * 100
+              marker = "🟢" if change > 5 else ("🔴" if change < -5 else "⚪")
+              print(f"  {marker} {name:<53} {b:>8.3f}ms {o:>8.3f}ms {speedup:>8.2f}x {change:>+8.1f}%")
+          
+          # Summary
+          slice1 = [n for n in base_map if "|slice=1|" in n or n.endswith("|slice=1")]
+          slice_other = [n for n in base_map if n not in slice1]
+          
+          def avg_speedup(names):
+              speedups = [base_map[n]["median_ms"] / opt_map[n]["median_ms"] for n in names if opt_map[n]["median_ms"] > 0]
+              return sum(speedups) / len(speedups) if speedups else 0
+          
+          print("\n" + "=" * 120)
+          print(f"  SUMMARY")
+          print(f"  slice=1 (optimized path) avg speedup:  {avg_speedup(slice1):.2f}x")
+          print(f"  slice>1 (standard path)  avg speedup:  {avg_speedup(slice_other):.2f}x  (should be ~1.0x)")
+          print("=" * 120)
+          COMPARE
+
+      - name: Save comparison report
+        run: |
+          python3 << 'REPORT'
+          import json
+          
+          with open("baseline/benchmark_results.json") as f:
+              baseline = json.load(f)
+          with open("optimized/benchmark_results.json") as f:
+              optimized = json.load(f)
+          
+          base_map = {r["name"]: r for r in baseline["results"]}
+          opt_map = {r["name"]: r for r in optimized["results"]}
+          
+          report = {"baseline_tf": baseline["tf_version"], "optimized_tf": optimized["tf_version"], "comparisons": []}
+          for name in base_map:
+              b = base_map[name]["median_ms"]
+              o = opt_map[name]["median_ms"]
+              report["comparisons"].append({
+                  "name": name, "baseline_ms": b, "optimized_ms": o,
+                  "speedup": round(b/o, 4) if o > 0 else None,
+                  "change_pct": round(((b-o)/b)*100, 2) if b > 0 else None
+              })
+          
+          with open("comparison_report.json", "w") as f:
+              json.dump(report, f, indent=2)
+          REPORT
+
+      - name: Upload comparison
+        uses: actions/upload-artifact@v4
+        with:
+          name: comparison-report
+          path: comparison_report.json
