@@ -59,7 +59,7 @@ jobs:
             --config=nonccl \
             --jobs=4 \
             --local_ram_resources=HOST_RAM*0.7 \
-            //tensorflow/core/kernels:scatter_nd_op_test -- \
+            //tensorflow/core/kernels:scatter_nd_op_test_cpu -- \
             --benchmark_filter=BM_ScatterNd \
             --benchmark_out=/tmp/cc_baseline.json \
             --benchmark_out_format=json
@@ -117,7 +117,7 @@ jobs:
             --config=nonccl \
             --jobs=4 \
             --local_ram_resources=HOST_RAM*0.7 \
-            //tensorflow/core/kernels:scatter_nd_op_test -- \
+            //tensorflow/core/kernels:scatter_nd_op_test_cpu -- \
             --benchmark_filter=BM_ScatterNd \
             --benchmark_out=/tmp/cc_optimized.json \
             --benchmark_out_format=json
